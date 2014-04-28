@@ -10,11 +10,15 @@ class GeanyQuartz < Formula
   depends_on 'intltool' => :build
   depends_on 'gettext'
   depends_on 'gtk+-quartz'
+  depends_on 'hicolor-icon-theme'
 
   def install
     system "./configure", "--disable-dependency-tracking",
                           "--disable-silent-rules",
-                          "--prefix=#{prefix}"
+                          "--prefix=#{prefix}",
+                          "--enable-gtk3",
+                          "--disable-debug",
+                          "--enable-introspection=yes"
     system "make install"
   end
 end
