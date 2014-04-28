@@ -6,17 +6,17 @@ The main tool here is inkscape, which will run natively (i.e. will not run insid
 
 Installing Quartz Formulas
 --------------------------
-Just `brew tap acornejo/quartz` and then `brew install <formula>`.
+Just `brew tap 3togo/quartz` and then `brew install <formula>`.
 
-To install inkscape do:
-`brew install inkscape-quartz`
+To install geany do:
+`brew install geany-quartz`
 
 Expect the build to take about 20m.
 
 You can also install via URL:
 
 ```
-brew install https://raw.github.com/acornejo/homebrew-quartz/master/<formula>.rb
+brew install https://raw.github.com/geany/homebrew-quartz/master/<formula>.rb
 ```
 
 Docs
