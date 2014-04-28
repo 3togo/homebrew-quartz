@@ -1,6 +1,6 @@
 require 'formula'
 
-class Geany < Formula
+class GeanyQuartz < Formula
   homepage 'http://geany.org/'
   url 'http://download.geany.org/geany-1.24.1.tar.gz'
   sha1 '2707b6bbcc4710e3dca990d26f66d679d82a2cc0'
