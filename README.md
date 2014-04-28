@@ -16,7 +16,7 @@ Expect the build to take about 20m.
 You can also install via URL:
 
 ```
-brew install https://raw.github.com/geany/homebrew-quartz/master/<formula>.rb
+brew install https://raw.github.com/3togo/homebrew-quartz/master/<formula>.rb
 ```
 
 Docs
