@@ -1,0 +1,10 @@
+--- gtkapplication-quartz-menu.c.orig	2014-05-02 00:53:11.000000000 +0800
++++ gtkapplication-quartz-menu.c	2014-05-02 00:56:38.000000000 +0800
+@@ -372,6 +372,7 @@ menu_item_removed (gint     position,
+                                       model,
+                                       NO,
+                                       NULL,
++                                      NULL,
+                                       menu_item_inserted,
+                                       menu_item_removed,
+                                       self);
