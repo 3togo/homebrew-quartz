@@ -23,7 +23,7 @@ class Gtk2xQuartz < Formula
    
   patch :p0 do 
     url 'https://raw.githubusercontent.com/3togo/homebrew-quartz/master/reverse-gtkclipboard-quartz.patch'
-    sha256 "316a7340a4b632175d245c7c66c25f86e3822b1642588e639186e681ff5ec807"
+    sha256 "3bd568b2a7dc20500c2e10eb55d7b46b742f26d3a26333f8d24d2223819a2c0d"
   end   
   
   def install
