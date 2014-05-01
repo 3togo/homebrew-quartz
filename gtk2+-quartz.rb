@@ -19,7 +19,11 @@ class Gtk2xQuartz < Formula
   keg_only 'This formula builds Gtk+ for use with Quartz instead of X11, which is experimental.'
 
   fails_with_llvm 'Undefined symbols when linking', :build => '2326' unless MacOS.lion?
-
+  #git hash-object ~/Downloads/gtkclipboard-quartz.patch 
+  def patches 
+    { :R => 'https://trac.macports.org/raw-attachment/ticket/37330/gtkclipboard-quartz.patch' }
+  end   
+  
   def install
     ENV.append 'LDFLAGS', '-framework Carbon -framework Cocoa'
     # gtk-update-icon-cache is used during installation, and
