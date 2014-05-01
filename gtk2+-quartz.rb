@@ -20,19 +20,21 @@ class Gtk2xQuartz < Formula
 
   fails_with_llvm 'Undefined symbols when linking', :build => '2326' unless MacOS.lion?
   #git hash-object ~/Downloads/gtkclipboard-quartz.patch 
-  def patches 
-    { :R => 'https://trac.macports.org/raw-attachment/ticket/37330/gtkclipboard-quartz.patch' }
+   
+  patch :p0 do 
+    url 'https://raw.githubusercontent.com/3togo/homebrew-quartz/master/reverse-gtkclipboard-quartz.patch'
+    sha256 "316a7340a4b632175d245c7c66c25f86e3822b1642588e639186e681ff5ec807"
   end   
   
   def install
     ENV.append 'LDFLAGS', '-framework Carbon -framework Cocoa'
     # gtk-update-icon-cache is used during installation, and
     # we don't want to add a dependency on gtk+2 just for this.
-    inreplace %w[ gtk/makefile.msc.in
-                  demos/gtk-demo/Makefile.in
-                  demos/widget-factory/Makefile.in ],
-                  /gtk-update-icon-cache --(force|ignore-theme-index)/,
-                  "#{buildpath}/gtk/\\0"
+    #inreplace %w[ gtk/makefile.msc.in
+    #              demos/gtk-demo/Makefile.in
+    #              demos/widget-factory/Makefile.in ],
+    #              /gtk-update-icon-cache --(force|ignore-theme-index)/,
+    #              "#{buildpath}/gtk/\\0"
 
     system './configure', "--prefix=#{prefix}",
                           '--disable-debug', '--disable-dependency-tracking',
