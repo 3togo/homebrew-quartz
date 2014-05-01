@@ -11,8 +11,8 @@ class PangoQuartz < Formula
   depends_on 'glib'
   depends_on 'fontconfig' if MacOS.leopard? # Leopard's fontconfig is too old.
   depends_on 'gobject-introspection'
-  depends_on '3togo/quartz/cairo-quartz'
-
+  #depends_on '3togo/quartz/cairo-quartz'
+  depends_on 'cairo-quartz'
   keg_only 'This formula builds Pango for use with Quartz instead of X11, which is experimental.'
 
   fails_with_llvm 'Undefined symbols when linking', :build => '2326'

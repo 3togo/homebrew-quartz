@@ -14,8 +14,8 @@ class Gtk2xQuartz < Formula
   depends_on 'jasper' => :optional
   depends_on 'atk'
 
-  depends_on '3togo/quartz/pango-quartz'
-  depends_on '3togo/quartz/cairo-quartz'
+  depends_on 'pango-quartz'
+  depends_on 'cairo-quartz'
   keg_only 'This formula builds Gtk+ for use with Quartz instead of X11, which is experimental.'
 
   fails_with_llvm 'Undefined symbols when linking', :build => '2326' unless MacOS.lion?
@@ -24,11 +24,11 @@ class Gtk2xQuartz < Formula
     ENV.append 'LDFLAGS', '-framework Carbon -framework Cocoa'
     # gtk-update-icon-cache is used during installation, and
     # we don't want to add a dependency on gtk+2 just for this.
-    #inreplace %w[ gtk/makefile.msc.in
-                  #demos/gtk-demo/Makefile.in
-                  #demos/widget-factory/Makefile.in ],
-                  #/gtk-update-icon-cache --(force|ignore-theme-index)/,
-                  #"#{buildpath}/gtk/\\0"
+    inreplace %w[ gtk/makefile.msc.in
+                  demos/gtk-demo/Makefile.in
+                  demos/widget-factory/Makefile.in ],
+                  /gtk-update-icon-cache --(force|ignore-theme-index)/,
+                  "#{buildpath}/gtk/\\0"
 
     system './configure', "--prefix=#{prefix}",
                           '--disable-debug', '--disable-dependency-tracking',
