@@ -1,0 +1,641 @@
+--- gtk/gtkapplication-quartz-menu.c.orig	2014-05-02 00:44:01.000000000 +0800
++++ gtk/gtkapplication-quartz-menu.c	2014-04-12 06:31:32.000000000 +0800
+@@ -1,5 +1,6 @@
+ /*
+- * Copyright © 2011 William Hua, Ryan Lortie
++ * Copyright © 2010 Codethink Limited
++ * Copyright © 2013 Canonical Limited
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -14,407 +15,320 @@
+  * You should have received a copy of the GNU Lesser General Public
+  * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+  *
+- * Author: William Hua <william@attente.ca>
+- *         Ryan Lortie <desrt@desrt.ca>
++ * Author: Ryan Lortie <desrt@desrt.ca>
+  */
+ 
+ #include "config.h"
+ 
+ #include "gtkapplicationprivate.h"
+-#include "gtkmenutracker.h"
+-#include "gtkicontheme.h"
+-#include "gtktoolbarprivate.h"
+-#include "gtkquartz.h"
+-
+-#include <gdk/quartz/gdkquartz.h>
+-
++#include "gtkbuilder.h"
+ #import <Cocoa/Cocoa.h>
+ 
+-#define ICON_SIZE 16
+-
+-#define BLACK               "#000000"
+-#define TANGO_CHAMELEON_3   "#4e9a06"
+-#define TANGO_ORANGE_2      "#f57900"
+-#define TANGO_SCARLET_RED_2 "#cc0000"
++typedef struct
++{
++  guint cookie;
++  GtkApplicationInhibitFlags flags;
++  char *reason;
++  GtkWindow *window;
++} GtkApplicationQuartzInhibitor;
+ 
+-@interface GNSMenu : NSMenu
++static void
++gtk_application_quartz_inhibitor_free (GtkApplicationQuartzInhibitor *inhibitor)
+ {
+-  GtkMenuTracker *tracker;
++  g_free (inhibitor->reason);
++  g_clear_object (&inhibitor->window);
++  g_slice_free (GtkApplicationQuartzInhibitor, inhibitor);
+ }
+ 
+-- (id)initWithTitle:(NSString *)title model:(GMenuModel *)model observable:(GtkActionObservable *)observable;
++typedef GtkApplicationImplClass GtkApplicationImplQuartzClass;
+ 
+-- (id)initWithTitle:(NSString *)title trackerItem:(GtkMenuTrackerItem *)trackerItem;
++typedef struct
++{
++  GtkApplicationImpl impl;
+ 
+-@end
++  GtkActionMuxer *muxer;
++  GMenu *combined;
+ 
+-@interface NSMenuItem (GtkMenuTrackerItem)
++  GSList *inhibitors;
++  gint quit_inhibit;
++  guint next_cookie;
++  NSObject *delegate;
++} GtkApplicationImplQuartz;
+ 
+-+ (id)menuItemForTrackerItem:(GtkMenuTrackerItem *)trackerItem;
++G_DEFINE_TYPE (GtkApplicationImplQuartz, gtk_application_impl_quartz, GTK_TYPE_APPLICATION_IMPL)
+ 
+-@end
+-
+-@interface GNSMenuItem : NSMenuItem
++@interface GtkApplicationQuartzDelegate : NSObject
+ {
+-  GtkMenuTrackerItem *trackerItem;
+-  gulong trackerItemChangedHandler;
+-  GCancellable *cancellable;
+-  BOOL isSpecial;
++  GtkApplicationImplQuartz *quartz;
+ }
+ 
+-- (id)initWithTrackerItem:(GtkMenuTrackerItem *)aTrackerItem;
+-
+-- (void)didChangeLabel;
+-- (void)didChangeIcon;
+-- (void)didChangeVisible;
+-- (void)didChangeToggled;
+-- (void)didChangeAccel;
++- (id)initWithImpl:(GtkApplicationImplQuartz*)impl;
++- (NSApplicationTerminateReply) applicationShouldTerminate:(NSApplication *)sender;
++@end
+ 
+-- (void)didSelectItem:(id)sender;
+-- (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
++@implementation GtkApplicationQuartzDelegate
++-(id)initWithImpl:(GtkApplicationImplQuartz*)impl
++{
++  [super init];
++  quartz = impl;
++  return self;
++}
+ 
++-(NSApplicationTerminateReply) applicationShouldTerminate:(NSApplication *)sender
++{
++  /* We have no way to give our message other than to pop up a dialog
++   * ourselves, which we should not do since the OS will already show
++   * one when we return NSTerminateNow.
++   *
++   * Just let the OS show the generic message...
++   */
++  return quartz->quit_inhibit == 0 ? NSTerminateNow : NSTerminateCancel;
++}
+ @end
+ 
++/* these exist only for accel handling */
+ static void
+-tracker_item_changed (GObject    *object,
+-                      GParamSpec *pspec,
+-                      gpointer    user_data)
++gtk_application_impl_quartz_hide (GSimpleAction *action,
++                                  GVariant      *parameter,
++                                  gpointer       user_data)
+ {
+-  GNSMenuItem *item = user_data;
+-  const gchar *name = g_param_spec_get_name (pspec);
++  [NSApp hide:NSApp];
++}
+ 
+-  if (name != NULL)
+-    {
+-      if (g_str_equal (name, "label"))
+-        [item didChangeLabel];
+-      else if (g_str_equal (name, "icon"))
+-        [item didChangeIcon];
+-      else if (g_str_equal (name, "visible"))
+-        [item didChangeVisible];
+-      else if (g_str_equal (name, "toggled"))
+-        [item didChangeToggled];
+-      else if (g_str_equal (name, "accel"))
+-        [item didChangeAccel];
+-    }
++static void
++gtk_application_impl_quartz_hide_others (GSimpleAction *action,
++                                         GVariant      *parameter,
++                                         gpointer       user_data)
++{
++  [NSApp hideOtherApplications:NSApp];
+ }
+ 
+ static void
+-icon_loaded (GObject      *object,
+-             GAsyncResult *result,
+-             gpointer      user_data)
+-{
+-  GtkIconInfo *info = GTK_ICON_INFO (object);
+-  GNSMenuItem *item = user_data;
+-  GError *error = NULL;
+-  GdkPixbuf *pixbuf;
++gtk_application_impl_quartz_show_all (GSimpleAction *action,
++                                      GVariant      *parameter,
++                                      gpointer       user_data)
++{
++  [NSApp unhideAllApplications:NSApp];
++}
+ 
+-  pixbuf = gtk_icon_info_load_symbolic_finish (info, result, NULL, &error);
++static GActionEntry gtk_application_impl_quartz_actions[] = {
++  { "hide",             gtk_application_impl_quartz_hide        },
++  { "hide-others",      gtk_application_impl_quartz_hide_others },
++  { "show-all",         gtk_application_impl_quartz_show_all    }
++};
+ 
+-  if (pixbuf != NULL)
+-    {
+-      [item setImage:_gtk_quartz_create_image_from_pixbuf (pixbuf)];
+-      g_object_unref (pixbuf);
++static void
++gtk_application_impl_quartz_startup (GtkApplicationImpl *impl,
++                                     gboolean            register_session)
++{
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
++  GSimpleActionGroup *gtkinternal;
++  GMenuModel *app_menu;
++
++  if (register_session)
++    {
++      quartz->delegate = [[GtkApplicationQuartzDelegate alloc] initWithImpl:quartz];
++      [NSApp setDelegate: quartz->delegate];
++    }
++
++  quartz->muxer = gtk_action_muxer_new ();
++  gtk_action_muxer_set_parent (quartz->muxer, gtk_application_get_action_muxer (impl->application));
++
++  /* Add the default accels */
++  gtk_application_add_accelerator (impl->application, "<Primary>comma", "app.preferences", NULL);
++  gtk_application_add_accelerator (impl->application, "<Primary><Alt>h", "gtkinternal.hide-others", NULL);
++  gtk_application_add_accelerator (impl->application, "<Primary>h", "gtkinternal.hide", NULL);
++  gtk_application_add_accelerator (impl->application, "<Primary>q", "app.quit", NULL);
++
++  /* and put code behind the 'special' accels */
++  gtkinternal = g_simple_action_group_new ();
++  g_action_map_add_action_entries (G_ACTION_MAP (gtkinternal), gtk_application_impl_quartz_actions,
++                                   G_N_ELEMENTS (gtk_application_impl_quartz_actions), quartz);
++  gtk_application_insert_action_group (impl->application, "gtkinternal", G_ACTION_GROUP (gtkinternal));
++  g_object_unref (gtkinternal);
++
++  /* now setup the menu */
++  app_menu = gtk_application_get_app_menu (impl->application);
++  if (app_menu == NULL)
++    {
++      GtkBuilder *builder;
++
++      /* If the user didn't fill in their own menu yet, add ours.
++       *
++       * The fact that we do this here ensures that we will always have the
++       * app menu at index 0 in 'combined'.
++       */
++      builder = gtk_builder_new_from_resource ("/org/gtk/libgtk/ui/gtkapplication-quartz.ui");
++      gtk_application_set_app_menu (impl->application, G_MENU_MODEL (gtk_builder_get_object (builder, "app-menu")));
++      g_object_unref (builder);
+     }
+   else
+-    {
+-      /* on failure to load, clear the old icon */
+-      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+-        [item setImage:nil];
++    gtk_application_impl_set_app_menu (impl, app_menu);
+ 
+-      g_error_free (error);
+-    }
+-}
++  /* This may or may not add an item to 'combined' */
++  gtk_application_impl_set_menubar (impl, gtk_application_get_menubar (impl->application));
+ 
+-@implementation GNSMenuItem
++  /* OK.  Now put it in the menu. */
++  gtk_application_impl_quartz_setup_menu (G_MENU_MODEL (quartz->combined), quartz->muxer);
+ 
+-- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+-{
+-  return gtk_menu_tracker_item_get_sensitive (trackerItem) ? YES : NO;
++  [NSApp finishLaunching];
+ }
+ 
+-- (id)initWithTrackerItem:(GtkMenuTrackerItem *)aTrackerItem
++static void
++gtk_application_impl_quartz_shutdown (GtkApplicationImpl *impl)
+ {
+-  self = [super initWithTitle:@""
+-                       action:@selector(didSelectItem:)
+-                keyEquivalent:@""];
+-
+-  if (self != nil)
+-    {
+-      const gchar *special = gtk_menu_tracker_item_get_special (aTrackerItem);
+-
+-      if (special && g_str_equal (special, "hide-this"))
+-        {
+-          [self setAction:@selector(hide:)];
+-          [self setTarget:NSApp];
+-        }
+-      else if (special && g_str_equal (special, "hide-others"))
+-        {
+-          [self setAction:@selector(hideOtherApplications:)];
+-          [self setTarget:NSApp];
+-        }
+-      else if (special && g_str_equal (special, "show-all"))
+-        {
+-          [self setAction:@selector(unhideAllApplications:)];
+-          [self setTarget:NSApp];
+-        }
+-      else if (special && g_str_equal (special, "services-submenu"))
+-        {
+-          [self setSubmenu:[[[NSMenu alloc] init] autorelease]];
+-          [NSApp setServicesMenu:[self submenu]];
+-          [self setTarget:self];
+-        }
+-      else
+-        [self setTarget:self];
+-
+-      trackerItem = g_object_ref (aTrackerItem);
+-      trackerItemChangedHandler = g_signal_connect (trackerItem, "notify", G_CALLBACK (tracker_item_changed), self);
+-      isSpecial = (special != NULL);
+-
+-      [self didChangeLabel];
+-      [self didChangeIcon];
+-      [self didChangeVisible];
+-      [self didChangeToggled];
+-      [self didChangeAccel];
+-
+-      if (gtk_menu_tracker_item_get_has_submenu (trackerItem))
+-        [self setSubmenu:[[[GNSMenu alloc] initWithTitle:[self title] trackerItem:trackerItem] autorelease]];
+-    }
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
+ 
+-  return self;
+-}
++  /* destroy our custom menubar */
++  [NSApp setMainMenu:[[[NSMenu alloc] init] autorelease]];
+ 
+-- (void)dealloc
+-{
+-  if (cancellable != NULL)
++  if (quartz->delegate)
+     {
+-      g_cancellable_cancel (cancellable);
+-      g_clear_object (&cancellable);
++      [quartz->delegate release];
++      quartz->delegate = NULL;
+     }
+ 
+-  g_signal_handler_disconnect (trackerItem, trackerItemChangedHandler);
+-  g_object_unref (trackerItem);
+-
+-  [super dealloc];
++  g_slist_free_full (quartz->inhibitors, (GDestroyNotify) gtk_application_quartz_inhibitor_free);
++  quartz->inhibitors = NULL;
+ }
+ 
+-- (void)didChangeLabel
++static void
++gtk_application_impl_quartz_active_window_changed (GtkApplicationImpl *impl,
++                                                   GtkWindow          *window)
+ {
+-  gchar *label = _gtk_toolbar_elide_underscores (gtk_menu_tracker_item_get_label (trackerItem));
+-
+-  NSString *title = [NSString stringWithUTF8String:label ? : ""];
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
+ 
+-  if (isSpecial)
+-    {
+-      NSRange range = [title rangeOfString:@"%s"];
+-
+-      if (range.location != NSNotFound)
+-        {
+-          NSBundle *bundle = [NSBundle mainBundle];
+-          NSString *name = [[bundle localizedInfoDictionary] objectForKey:@"CFBundleName"];
+-
+-          if (name == nil)
+-            name = [[bundle infoDictionary] objectForKey:@"CFBundleName"];
++  gtk_action_muxer_remove (quartz->muxer, "win");
+ 
+-          if (name == nil)
+-            name = [[NSProcessInfo processInfo] processName];
+-
+-          if (name != nil)
+-            title = [title stringByReplacingCharactersInRange:range withString:name];
+-        }
+-    }
+-
+-  [self setTitle:title];
+-
+-  g_free (label);
++  if (G_IS_ACTION_GROUP (window))
++    gtk_action_muxer_insert (quartz->muxer, "win", G_ACTION_GROUP (window));
+ }
+ 
+-- (void)didChangeIcon
++static void
++gtk_application_impl_quartz_set_app_menu (GtkApplicationImpl *impl,
++                                          GMenuModel         *app_menu)
+ {
+-  GIcon *icon = gtk_menu_tracker_item_get_icon (trackerItem);
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
+ 
+-  if (cancellable != NULL)
+-    {
+-      g_cancellable_cancel (cancellable);
+-      g_clear_object (&cancellable);
+-    }
++  /* If there are any items at all, then the first one is the app menu */
++  if (g_menu_model_get_n_items (G_MENU_MODEL (quartz->combined)))
++    g_menu_remove (quartz->combined, 0);
+ 
+-  if (icon != NULL)
++  if (app_menu)
++    g_menu_prepend_submenu (quartz->combined, "Application", app_menu);
++  else
+     {
+-      static gboolean parsed;
+-
+-      static GdkRGBA foreground;
+-      static GdkRGBA success;
+-      static GdkRGBA warning;
+-      static GdkRGBA error;
+-
+-      GtkIconTheme *theme;
+-      GtkIconInfo *info;
+-      gint scale;
++      GMenu *empty;
+ 
+-      if (!parsed)
+-        {
+-          gdk_rgba_parse (&foreground, BLACK);
+-          gdk_rgba_parse (&success, TANGO_CHAMELEON_3);
+-          gdk_rgba_parse (&warning, TANGO_ORANGE_2);
+-          gdk_rgba_parse (&error, TANGO_SCARLET_RED_2);
+-
+-          parsed = TRUE;
+-        }
+-
+-      theme = gtk_icon_theme_get_default ();
+-      scale = roundf ([[NSScreen mainScreen] backingScaleFactor]);
+-      info = gtk_icon_theme_lookup_by_gicon_for_scale (theme, icon, ICON_SIZE, scale, GTK_ICON_LOOKUP_USE_BUILTIN);
+-
+-      if (info != NULL)
+-        {
+-          cancellable = g_cancellable_new ();
+-          gtk_icon_info_load_symbolic_async (info, &foreground, &success, &warning, &error,
+-                                             cancellable, icon_loaded, self);
+-          g_object_unref (info);
+-          return;
+-        }
++      /* We must preserve the rule that index 0 is the app menu */
++      empty = g_menu_new ();
++      g_menu_prepend_submenu (quartz->combined, "Application", G_MENU_MODEL (empty));
++      g_object_unref (empty);
+     }
+-
+-  [self setImage:nil];
+ }
+ 
+-- (void)didChangeVisible
+-{
+-  [self setHidden:gtk_menu_tracker_item_get_visible (trackerItem) ? NO : YES];
+-}
+-
+-- (void)didChangeToggled
++static void
++gtk_application_impl_quartz_set_menubar (GtkApplicationImpl *impl,
++                                         GMenuModel         *menubar)
+ {
+-  [self setState:gtk_menu_tracker_item_get_toggled (trackerItem) ? NSOnState : NSOffState];
+-}
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
+ 
+-- (void)didChangeAccel
+-{
+-  const gchar *accel = gtk_menu_tracker_item_get_accel (trackerItem);
++  /* If we have the menubar, it is a section at index '1' */
++  if (g_menu_model_get_n_items (G_MENU_MODEL (quartz->combined)) > 1)
++    g_menu_remove (quartz->combined, 1);
+ 
+-  if (accel != NULL)
+-    {
+-      guint key;
+-      GdkModifierType mask;
+-      unichar character;
+-      NSUInteger modifiers;
+-
+-      gtk_accelerator_parse (accel, &key, &mask);
+-
+-      character = gdk_quartz_get_key_equivalent (key);
+-      [self setKeyEquivalent:[NSString stringWithCharacters:&character length:1]];
+-
+-      modifiers = 0;
+-      if (mask & GDK_SHIFT_MASK)
+-        modifiers |= NSShiftKeyMask;
+-      if (mask & GDK_CONTROL_MASK)
+-        modifiers |= NSControlKeyMask;
+-      if (mask & GDK_MOD1_MASK)
+-        modifiers |= NSAlternateKeyMask;
+-      if (mask & GDK_META_MASK)
+-        modifiers |= NSCommandKeyMask;
+-      [self setKeyEquivalentModifierMask:modifiers];
+-    }
+-  else
+-    {
+-      [self setKeyEquivalent:@""];
+-      [self setKeyEquivalentModifierMask:0];
+-    }
++  if (menubar)
++    g_menu_append_section (quartz->combined, NULL, menubar);
+ }
+ 
+-- (void)didSelectItem:(id)sender
++static guint
++gtk_application_impl_quartz_inhibit (GtkApplicationImpl         *impl,
++                                     GtkWindow                  *window,
++                                     GtkApplicationInhibitFlags  flags,
++                                     const gchar                *reason)
+ {
+-  gtk_menu_tracker_item_activated (trackerItem);
+-}
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
++  GtkApplicationQuartzInhibitor *inhibitor;
+ 
+-@end
++  inhibitor = g_slice_new (GtkApplicationQuartzInhibitor);
++  inhibitor->cookie = ++quartz->next_cookie;
++  inhibitor->flags = flags;
++  inhibitor->reason = g_strdup (reason);
++  inhibitor->window = window ? g_object_ref (window) : NULL;
+ 
+-@implementation NSMenuItem (GtkMenuTrackerItem)
++  quartz->inhibitors = g_slist_prepend (quartz->inhibitors, inhibitor);
+ 
+-+ (id)menuItemForTrackerItem:(GtkMenuTrackerItem *)trackerItem
+-{
+-  if (gtk_menu_tracker_item_get_is_separator (trackerItem))
+-    return [NSMenuItem separatorItem];
++  if (flags & GTK_APPLICATION_INHIBIT_LOGOUT)
++    quartz->quit_inhibit++;
+ 
+-  return [[[GNSMenuItem alloc] initWithTrackerItem:trackerItem] autorelease];
++  return inhibitor->cookie;
+ }
+ 
+-@end
+-
+ static void
+-menu_item_inserted (GtkMenuTrackerItem *item,
+-                    gint                position,
+-                    gpointer            user_data)
++gtk_application_impl_quartz_uninhibit (GtkApplicationImpl *impl,
++                                       guint               cookie)
+ {
+-  GNSMenu *menu = user_data;
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
++  GSList *iter;
+ 
+-  [menu insertItem:[NSMenuItem menuItemForTrackerItem:item] atIndex:position];
+-}
++  for (iter = quartz->inhibitors; iter; iter = iter->next)
++    {
++      GtkApplicationQuartzInhibitor *inhibitor = iter->data;
+ 
+-static void
+-menu_item_removed (gint     position,
+-                   gpointer user_data)
+-{
+-  GNSMenu *menu = user_data;
++      if (inhibitor->cookie == cookie)
++        {
++          if (inhibitor->flags & GTK_APPLICATION_INHIBIT_LOGOUT)
++            quartz->quit_inhibit--;
++          gtk_application_quartz_inhibitor_free (inhibitor);
++          quartz->inhibitors = g_slist_delete_link (quartz->inhibitors, iter);
++          return;
++        }
++    }
+ 
+-  [menu removeItemAtIndex:position];
++  g_warning ("Invalid inhibitor cookie");
+ }
+ 
+-@implementation GNSMenu
+-
+-- (id)initWithTitle:(NSString *)title model:(GMenuModel *)model observable:(GtkActionObservable *)observable
++static gboolean
++gtk_application_impl_quartz_is_inhibited (GtkApplicationImpl         *impl,
++                                          GtkApplicationInhibitFlags  flags)
+ {
+-  self = [super initWithTitle:title];
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) impl;
+ 
+-  if (self != nil)
+-    {
+-      tracker = gtk_menu_tracker_new (observable,
+-                                      model,
+-                                      NO,
+-                                      NULL,
+-                                      menu_item_inserted,
+-                                      menu_item_removed,
+-                                      self);
+-    }
++  if (flags & GTK_APPLICATION_INHIBIT_LOGOUT)
++    return quartz->quit_inhibit > 0;
+ 
+-  return self;
++  return FALSE;
+ }
+ 
+-- (id)initWithTitle:(NSString *)title trackerItem:(GtkMenuTrackerItem *)trackerItem
++static void
++gtk_application_impl_quartz_init (GtkApplicationImplQuartz *quartz)
+ {
+-  self = [super initWithTitle:title];
+-
+-  if (self != nil)
+-    {
+-      tracker = gtk_menu_tracker_new_for_item_submenu (trackerItem,
+-                                                       menu_item_inserted,
+-                                                       menu_item_removed,
+-                                                       self);
+-    }
+-
+-  return self;
++  quartz->combined = g_menu_new ();
+ }
+ 
+-- (void)dealloc
++static void
++gtk_application_impl_quartz_finalize (GObject *object)
+ {
+-  gtk_menu_tracker_free (tracker);
++  GtkApplicationImplQuartz *quartz = (GtkApplicationImplQuartz *) object;
+ 
+-  [super dealloc];
+-}
++  g_clear_object (&quartz->combined);
+ 
+-@end
++  G_OBJECT_CLASS (gtk_application_impl_quartz_parent_class)->finalize (object);
++}
+ 
+-void
+-gtk_application_impl_quartz_setup_menu (GMenuModel     *model,
+-                                        GtkActionMuxer *muxer)
++static void
++gtk_application_impl_quartz_class_init (GtkApplicationImplClass *class)
+ {
+-  NSMenu *menu;
++  GObjectClass *gobject_class = G_OBJECT_CLASS (class);
+ 
+-  if (model != NULL)
+-    menu = [[GNSMenu alloc] initWithTitle:@"Main Menu" model:model observable:GTK_ACTION_OBSERVABLE (muxer)];
+-  else
+-    menu = [[NSMenu alloc] init];
++  class->startup = gtk_application_impl_quartz_startup;
++  class->shutdown = gtk_application_impl_quartz_shutdown;
++  class->active_window_changed = gtk_application_impl_quartz_active_window_changed;
++  class->set_app_menu = gtk_application_impl_quartz_set_app_menu;
++  class->set_menubar = gtk_application_impl_quartz_set_menubar;
++  class->inhibit = gtk_application_impl_quartz_inhibit;
++  class->uninhibit = gtk_application_impl_quartz_uninhibit;
++  class->is_inhibited = gtk_application_impl_quartz_is_inhibited;
+ 
+-  [NSApp setMainMenu:menu];
+-  [menu release];
++  gobject_class->finalize = gtk_application_impl_quartz_finalize;
+ }
