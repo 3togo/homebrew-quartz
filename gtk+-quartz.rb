@@ -21,13 +21,12 @@ class GtkxQuartz < Formula
   keg_only 'This formula builds Gtk+ for use with Quartz instead of X11, which is experimental.'
 
   fails_with_llvm 'Undefined symbols when linking', :build => '2326' unless MacOS.lion?
-  patch :p0 do 
-    url 'https://raw.githubusercontent.com/3togo/homebrew-quartz/master/reverse-gtkclipboard-quartz.patch'
-    sha256 "32a7dc20500c2e10eb55d7b46b742f26d3a26333f8d24d2223819a2c0d"
+  patch :p1 do 
+    url 'https://raw.githubusercontent.com/3togo/homebrew-quartz/master/gtkapplication-quartz-menu-3.13.1.patch'
+    sha256 "be4744fcb7c26a69dd38455383f076dd09c32a2dc480e8e27aa96d118305adb8"
   end   
   
-  end
-  def install
+  def configure_install
     ENV.append 'LDFLAGS', '-framework Carbon -framework Cocoa'
     # gtk-update-icon-cache is used during installation, and
     # we don't want to add a dependency on gtk+2 just for this.
@@ -46,7 +45,9 @@ class GtkxQuartz < Formula
 
     system 'make install'
   end
-
+  def install
+	configure_install
+  end
   #def test
   #  system '#{bin}/gtk-demo'
   #end
