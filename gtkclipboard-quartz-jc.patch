@@ -1,5 +1,5 @@
 --- gtk/gtkclipboard-quartz.c.orig	2014-05-01 22:14:13.000000000 +0800
-+++ gtk/gtkclipboard.c	2014-03-06 12:56:42.000000000 +0800
++++ gtk/gtkclipboard-quartz.c	2014-03-06 12:56:42.000000000 +0800
 @@ -1,7 +1,6 @@
  /* GTK - The GIMP Toolkit
   * Copyright (C) 2000 Red Hat, Inc.
