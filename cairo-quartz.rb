@@ -5,7 +5,7 @@ class CairoQuartz < Formula
   #url 'http://www.cairographics.org/releases/cairo-1.10.2.tar.gz'
   #sha1 'ccce5ae03f99c505db97c286a0c9a90a926d3c6e'
   url "http://www.cairographics.org/releases/cairo-1.14.0.tar.xz"
-  #sha1 "4f6e337d5d3edd7ea79d1426f575331552b003ec" 
+  sha1 "53cf589b983412ea7f78feee2e1ba9cea6e3ebae" 
   #depends_on :x11
   depends_on 'pkg-config' => :build
   depends_on 'freetype'
