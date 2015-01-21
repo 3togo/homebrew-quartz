@@ -21,10 +21,10 @@ class GtkxQuartz < Formula
   keg_only 'This formula builds Gtk+ for use with Quartz instead of X11, which is experimental.'
 
   fails_with_llvm 'Undefined symbols when linking', :build => '2326' unless MacOS.lion?
-  patch :p1 do 
-    url 'https://raw.githubusercontent.com/3togo/homebrew-quartz/master/gtkapplication-quartz-menu-3.13.1.patch'
-    sha256 "5e907c6b135b710a97882a6310fe347098f6c2928f30d5f6e59e2889969acd4f"
-  end   
+  #patch :p1 do 
+  #  url 'https://raw.githubusercontent.com/3togo/homebrew-quartz/master/gtkapplication-quartz-menu-3.13.1.patch'
+  #  sha256 "5e907c6b135b710a97882a6310fe347098f6c2928f30d5f6e59e2889969acd4f"
+  #end   
   
   def configure_install
     ENV.append 'LDFLAGS', '-framework Carbon -framework Cocoa'
