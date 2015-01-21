@@ -2,8 +2,8 @@ require 'formula'
 
 class GtkxQuartz < Formula
   homepage 'http://www.gtk.org/'
- 
-  url 'http://ftp.acc.umu.se/pub/GNOME/sources/gtk+/3.14/gtk+-3.14.7.tar.xz'
+  url 'http://ftp.acc.umu.se/pub/GNOME/sources/gtk+/3.13/gtk+-3.13.9.tar.xz'
+  #url 'http://ftp.acc.umu.se/pub/GNOME/sources/gtk+/3.14/gtk+-3.14.7.tar.xz'
   #sha1 'b3bd754863325f963e5539fb8fbf3c4303b8bdc7'
   #url 'http://ftp.acc.umu.se/pub/GNOME/sources/gtk+/3.15/gtk+-3.15.4.tar.xz'
   #sha1 '3f5ea41a11b1705221e9d773fc03b845bade743e'
