@@ -30,8 +30,7 @@ class GtkxQuartz < Formula
     # gtk-update-icon-cache is used during installation, and
     # we don't want to add a dependency on gtk+2 just for this.
     inreplace %w[ gtk/makefile.msc.in
-                  demos/gtk-demo/Makefile.in
-                  demos/widget-factory/Makefile.in ],
+                   ],
                   /gtk-update-icon-cache --(force|ignore-theme-index)/,
                   "#{buildpath}/gtk/\\0"
 
