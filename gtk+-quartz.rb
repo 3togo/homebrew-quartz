@@ -6,6 +6,7 @@ class GtkxQuartz < Formula
   #url 'http://ftp.gnome.org/pub/GNOME/sources/gtk+/3.13/gtk+-3.13.1.tar.xz'
   #sha1 'b3bd754863325f963e5539fb8fbf3c4303b8bdc7'
   url 'http://ftp.acc.umu.se/pub/GNOME/sources/gtk+/3.15/gtk+-3.15.4.tar.xz'
+  sha1 '3f5ea41a11b1705221e9d773fc03b845bade743e'
   depends_on 'pkg-config' => :build
   depends_on 'glib'
   depends_on 'jpeg'
